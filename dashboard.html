@@ -1,0 +1,1746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CrowdLens — Video Analysis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ══════════════════════ CSS VARIABLES ══════════════════════ */
+:root {
+  --bg:       #0d1117; --bg2:     #161b22; --bg3:     #1c2330;
+  --bg4:      #21262d; --border:  #30363d; --border2: #3d444d;
+  --text:     #e6edf3; --text2:   #8b949e; --text3:   #484f58;
+  --cyan:     #58a6ff; --cyan2:   #388bfd; --green:   #3fb950;
+  --orange:   #e3b341; --red:     #f85149; --purple:  #bc8cff;
+  --pink:     #ff7b72; --teal:    #39d353;
+  --r:        8px;     --r2:      12px;    --r3:      16px;
+  --shadow:   0 8px 24px rgba(0,0,0,.4);
+  --shadow2:  0 16px 48px rgba(0,0,0,.6);
+  --transition: all .18s cubic-bezier(.4,0,.2,1);
+}
+*, *::before, *::after { box-sizing:border-box; margin:0; padding:0 }
+html { scroll-behavior:smooth }
+body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text);
+       font-size:14px; line-height:1.5; min-height:100vh; overflow-x:hidden }
+
+/* ══════════════════════ LAYOUT ══════════════════════ */
+.shell { display:grid; grid-template-columns:240px 1fr; grid-template-rows:60px 1fr; height:100vh; overflow:hidden }
+
+/* Topbar */
+.topbar { grid-column:1/-1; background:var(--bg2); border-bottom:1px solid var(--border);
+  display:flex; align-items:center; padding:0 20px; gap:16px; z-index:100 }
+.logo-mark { width:34px; height:34px; background:linear-gradient(135deg,var(--cyan),var(--purple));
+  border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:16px;
+  flex-shrink:0; box-shadow:0 0 16px rgba(88,166,255,.3) }
+.logo-text { font-size:16px; font-weight:700; letter-spacing:-.3px }
+.logo-sub  { font-size:11px; color:var(--text3); letter-spacing:.04em }
+.topbar-center { flex:1; display:flex; justify-content:center; gap:8px }
+.tab-btn { padding:6px 16px; border-radius:var(--r); background:none; border:none;
+  color:var(--text2); font-size:13px; font-family:'Inter',sans-serif; cursor:pointer;
+  transition:var(--transition); display:flex; align-items:center; gap:6px }
+.tab-btn:hover { color:var(--text); background:var(--bg3) }
+.tab-btn.active { color:var(--cyan); background:rgba(88,166,255,.1) }
+.topbar-right { display:flex; align-items:center; gap:10px; margin-left:auto }
+.sys-pill { display:flex; align-items:center; gap:6px; padding:5px 10px;
+  background:var(--bg3); border:1px solid var(--border); border-radius:20px; font-size:12px; color:var(--text2) }
+.sys-dot { width:6px; height:6px; border-radius:50%; background:var(--text3); transition:var(--transition) }
+.sys-dot.live { background:var(--green); box-shadow:0 0 6px var(--green); animation:blink 2s infinite }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.5} }
+
+/* Sidebar */
+.sidebar { background:var(--bg2); border-right:1px solid var(--border);
+  overflow-y:auto; padding:12px 0; display:flex; flex-direction:column; gap:2px }
+.nav-section { font-size:10px; color:var(--text3); text-transform:uppercase;
+  letter-spacing:.12em; padding:14px 16px 6px }
+.nav-item { padding:8px 16px; border-radius:var(--r); margin:0 6px; cursor:pointer;
+  color:var(--text2); font-size:13px; display:flex; align-items:center; gap:10px;
+  transition:var(--transition); border:1px solid transparent; position:relative }
+.nav-item:hover { color:var(--text); background:var(--bg3) }
+.nav-item.active { color:var(--cyan); background:rgba(88,166,255,.08); border-color:rgba(88,166,255,.2) }
+.nav-item .nav-icon { font-size:15px; width:20px; text-align:center }
+.nav-badge { margin-left:auto; background:var(--cyan); color:#000; font-size:10px;
+  font-weight:700; padding:1px 6px; border-radius:10px; line-height:1.4 }
+
+/* Content */
+.content { overflow-y:auto; background:var(--bg); padding:24px }
+.page { display:none; animation:fadeIn .2s ease }
+.page.active { display:block }
+@keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+
+/* ══════════════════════ COMPONENTS ══════════════════════ */
+.page-header { margin-bottom:24px }
+.page-title { font-size:22px; font-weight:700; letter-spacing:-.4px }
+.page-sub { font-size:13px; color:var(--text2); margin-top:4px }
+
+.card { background:var(--bg2); border:1px solid var(--border); border-radius:var(--r2); padding:20px }
+.card-hd { font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.08em;
+  color:var(--text2); margin-bottom:16px; display:flex; align-items:center; gap:8px }
+.card-hd::before { content:''; width:3px; height:12px; background:var(--cyan); border-radius:2px }
+
+/* Stat cards */
+.stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin-bottom:20px }
+.stat-card { background:var(--bg3); border:1px solid var(--border); border-radius:var(--r2);
+  padding:14px 16px; position:relative; overflow:hidden; transition:var(--transition) }
+.stat-card:hover { border-color:var(--border2); transform:translateY(-1px) }
+.stat-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px;
+  background:var(--accent,var(--cyan)); border-radius:var(--r2) var(--r2) 0 0 }
+.stat-val { font-size:26px; font-weight:700; font-family:'JetBrains Mono',monospace; color:var(--accent,var(--cyan)) }
+.stat-lbl { font-size:11px; color:var(--text3); text-transform:uppercase; letter-spacing:.07em; margin-top:3px }
+.stat-delta { font-size:11px; margin-top:4px }
+.delta-up { color:var(--green) } .delta-dn { color:var(--red) }
+
+/* Progress bar */
+.pbar { height:4px; background:var(--bg4); border-radius:2px; overflow:hidden }
+.pbar-fill { height:100%; background:linear-gradient(90deg,var(--cyan),var(--purple));
+  border-radius:2px; transition:width .4s ease; min-width:0 }
+.pbar.thick { height:8px; border-radius:4px }
+.pbar.thick .pbar-fill { border-radius:4px }
+.pbar.green .pbar-fill { background:linear-gradient(90deg,var(--green),var(--teal)) }
+
+/* Buttons */
+.btn { display:inline-flex; align-items:center; justify-content:center; gap:7px;
+  padding:9px 18px; border-radius:var(--r); font-size:13px; font-weight:500;
+  font-family:'Inter',sans-serif; cursor:pointer; transition:var(--transition);
+  border:none; white-space:nowrap }
+.btn:active { transform:scale(.98) }
+.btn-primary { background:var(--cyan2); color:#fff }
+.btn-primary:hover { background:var(--cyan); box-shadow:0 0 16px rgba(88,166,255,.4) }
+.btn-primary:disabled { background:var(--bg4); color:var(--text3); cursor:not-allowed; transform:none; box-shadow:none }
+.btn-outline { background:var(--bg3); border:1px solid var(--border2); color:var(--text2) }
+.btn-outline:hover { border-color:var(--cyan); color:var(--cyan) }
+.btn-ghost  { background:none; border:none; color:var(--text2) }
+.btn-ghost:hover  { color:var(--text); background:var(--bg3) }
+.btn-danger { background:rgba(248,81,73,.12); border:1px solid rgba(248,81,73,.3); color:var(--red) }
+.btn-danger:hover { background:rgba(248,81,73,.2) }
+.btn-success{ background:rgba(63,185,80,.12); border:1px solid rgba(63,185,80,.3); color:var(--green) }
+.btn-lg { padding:12px 28px; font-size:14px; font-weight:600; border-radius:var(--r2); width:100% }
+
+/* Inputs */
+.inp { background:var(--bg3); border:1px solid var(--border); border-radius:var(--r);
+  padding:8px 12px; color:var(--text); font-size:13px; font-family:'Inter',sans-serif;
+  outline:none; width:100%; transition:var(--transition) }
+.inp:focus { border-color:var(--cyan); box-shadow:0 0 0 3px rgba(88,166,255,.1) }
+.inp::placeholder { color:var(--text3) }
+.inp-label { font-size:11px; color:var(--text2); text-transform:uppercase;
+  letter-spacing:.07em; margin-bottom:6px; display:block }
+
+/* Range */
+.range-row { display:flex; align-items:center; gap:10px }
+.range-row input[type=range] { flex:1; accent-color:var(--cyan); cursor:pointer }
+.range-val { font-size:12px; font-family:'JetBrains Mono',monospace; color:var(--cyan); min-width:36px; text-align:right }
+
+/* ══════════════════════ DROP ZONE ══════════════════════ */
+.drop-zone { border:2px dashed var(--border2); border-radius:var(--r2); padding:32px 20px;
+  text-align:center; cursor:pointer; transition:var(--transition); position:relative }
+.drop-zone input { position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100% }
+.drop-zone:hover, .drop-zone.over { border-color:var(--cyan); background:rgba(88,166,255,.04) }
+.drop-zone.has-files { border-color:rgba(63,185,80,.5); background:rgba(63,185,80,.04) }
+.dz-icon { font-size:32px; margin-bottom:10px }
+.dz-label { font-size:14px; font-weight:500; color:var(--text2) }
+.dz-sub { font-size:12px; color:var(--text3); margin-top:4px }
+
+/* File chips */
+.file-list { display:flex; flex-direction:column; gap:6px; margin-top:10px }
+.file-chip { background:var(--bg3); border:1px solid var(--border); border-radius:var(--r);
+  padding:8px 12px; display:flex; align-items:center; gap:10px; transition:var(--transition) }
+.file-chip:hover { border-color:var(--border2) }
+.file-chip-icon { font-size:18px; flex-shrink:0 }
+.file-chip-name { flex:1; font-size:12px; font-family:'JetBrains Mono',monospace;
+  color:var(--cyan); overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.file-chip-size { font-size:11px; color:var(--text3); white-space:nowrap }
+.file-chip-rm { background:none; border:none; color:var(--text3); cursor:pointer;
+  font-size:16px; padding:2px 4px; border-radius:4px; transition:var(--transition) }
+.file-chip-rm:hover { color:var(--red); background:rgba(248,81,73,.1) }
+
+/* ══════════════════════ PERSON CARDS ══════════════════════ */
+.person-list { display:flex; flex-direction:column; gap:10px }
+.person-card { background:var(--bg3); border:1px solid var(--border); border-radius:var(--r2);
+  padding:14px; transition:var(--transition) }
+.person-card:hover { border-color:var(--border2) }
+.person-card-head { display:flex; align-items:center; gap:10px; margin-bottom:12px }
+.person-avatar { width:28px; height:28px; border-radius:50%;
+  background:linear-gradient(135deg,var(--cyan),var(--purple));
+  display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700;
+  color:#fff; flex-shrink:0 }
+.person-inp { flex:1; background:var(--bg2); border:1px solid var(--border);
+  border-radius:var(--r); padding:6px 10px; color:var(--text); font-size:13px;
+  font-family:'Inter',sans-serif; outline:none; transition:var(--transition) }
+.person-inp:focus { border-color:var(--cyan) }
+.person-inp::placeholder { color:var(--text3) }
+.person-rm { background:none; border:none; color:var(--text3); cursor:pointer;
+  font-size:18px; padding:3px 6px; border-radius:var(--r); transition:var(--transition) }
+.person-rm:hover { color:var(--red); background:rgba(248,81,73,.1) }
+.photo-row { display:flex; flex-wrap:wrap; gap:8px; align-items:center }
+.photo-thumb { position:relative; width:58px; height:58px; border-radius:var(--r);
+  overflow:hidden; border:2px solid var(--border); transition:var(--transition) }
+.photo-thumb:hover { border-color:var(--cyan) }
+.photo-thumb img { width:100%; height:100%; object-fit:cover; display:block }
+.photo-del { position:absolute; inset:0; background:rgba(0,0,0,.6); border:none;
+  color:#fff; font-size:16px; cursor:pointer; opacity:0; transition:var(--transition);
+  display:flex; align-items:center; justify-content:center }
+.photo-thumb:hover .photo-del { opacity:1 }
+.photo-add { width:58px; height:58px; border:2px dashed var(--border); border-radius:var(--r);
+  background:none; color:var(--text3); font-size:22px; cursor:pointer; position:relative;
+  display:flex; align-items:center; justify-content:center; transition:var(--transition) }
+.photo-add:hover { border-color:var(--cyan); color:var(--cyan); background:rgba(88,166,255,.04) }
+.photo-add input { position:absolute; inset:0; opacity:0; cursor:pointer }
+.add-person-btn { width:100%; padding:10px; background:none; border:1px dashed var(--border2);
+  border-radius:var(--r); color:var(--text3); font-size:13px; font-family:'Inter',sans-serif;
+  cursor:pointer; transition:var(--transition); margin-top:2px }
+.add-person-btn:hover { border-color:var(--cyan); color:var(--cyan) }
+
+/* ══════════════════════ SETTINGS ══════════════════════ */
+.settings-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px }
+
+/* ══════════════════════ UPLOAD LAYOUT ══════════════════════ */
+.upload-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px }
+@media(max-width:840px) { .upload-grid { grid-template-columns:1fr } }
+
+/* ══════════════════════ PROGRESS PAGE ══════════════════════ */
+.progress-wrap { max-width:600px; margin:0 auto; padding:20px 0 }
+.progress-header { display:flex; align-items:center; gap:14px; margin-bottom:28px }
+.spinner { width:36px; height:36px; border:3px solid var(--bg4);
+  border-top-color:var(--cyan); border-radius:50%; animation:spin .7s linear infinite; flex-shrink:0 }
+@keyframes spin { to { transform:rotate(360deg) } }
+.progress-title { font-size:20px; font-weight:700 }
+.progress-sub { font-size:13px; color:var(--text2) }
+.pct-display { font-size:48px; font-weight:700; font-family:'JetBrains Mono',monospace;
+  color:var(--cyan); line-height:1; margin-bottom:12px }
+.progress-msg { font-size:12px; color:var(--text2); margin-top:8px; min-height:18px }
+.video-prog-list { margin-top:20px; display:flex; flex-direction:column; gap:12px }
+.vid-prog-item { background:var(--bg2); border:1px solid var(--border); border-radius:var(--r); padding:12px 14px }
+.vid-prog-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px }
+.vid-prog-name { font-size:12px; font-weight:500 }
+.vid-prog-pct { font-size:12px; font-family:'JetBrains Mono',monospace; color:var(--cyan) }
+.vid-prog-msg { font-size:11px; color:var(--text3); margin-top:4px }
+
+/* ══════════════════════ JOBS LIST ══════════════════════ */
+.job-table { display:flex; flex-direction:column; gap:0 }
+.job-row { display:grid; grid-template-columns:70px 1fr 100px 80px 90px;
+  align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--border) }
+.job-row:last-child { border-bottom:none }
+.job-row:hover { background:rgba(255,255,255,.01) }
+.job-id-badge { font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--cyan);
+  background:rgba(88,166,255,.08); border:1px solid rgba(88,166,255,.2);
+  border-radius:6px; padding:3px 7px; width:fit-content }
+.status-pill { font-size:11px; padding:3px 9px; border-radius:10px; font-weight:500; width:fit-content }
+.s-queued     { background:rgba(139,148,158,.12); color:var(--text2) }
+.s-enrolling  { background:rgba(88,166,255,.12);  color:var(--cyan) }
+.s-processing { background:rgba(88,166,255,.12);  color:var(--cyan) }
+.s-extracting { background:rgba(188,140,255,.12); color:var(--purple) }
+.s-done       { background:rgba(63,185,80,.12);   color:var(--green) }
+.s-error      { background:rgba(248,81,73,.12);   color:var(--red) }
+.s-cancelled  { background:rgba(139,148,158,.12); color:var(--text3) }
+
+/* ══════════════════════ WORKER CARDS ══════════════════════ */
+.workers-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:14px }
+.worker-card { background:var(--bg2); border:1px solid var(--border); border-radius:var(--r2);
+  padding:16px; transition:var(--transition) }
+.worker-card:hover { border-color:var(--border2) }
+.worker-card.dead { opacity:.5 }
+.worker-head { display:flex; align-items:center; gap:8px; margin-bottom:14px }
+.worker-id { font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--text);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1 }
+.w-metric { display:flex; justify-content:space-between; padding:5px 0;
+  border-bottom:1px solid var(--border); font-size:12px }
+.w-metric:last-child { border-bottom:none }
+.w-metric-lbl { color:var(--text3) }
+.w-metric-val { font-family:'JetBrains Mono',monospace; color:var(--text) }
+.mini-bar { height:4px; background:var(--bg4); border-radius:2px; overflow:hidden; margin-top:3px }
+.mini-bar-fill { height:100%; border-radius:2px; transition:width .4s }
+
+/* ══════════════════════ RESULTS ══════════════════════ */
+.results-top { display:flex; align-items:flex-start; justify-content:space-between;
+  margin-bottom:20px; gap:12px; flex-wrap:wrap }
+.result-video-block { margin-bottom:28px }
+.result-block-title { font-size:13px; font-weight:600; color:var(--text2); text-transform:uppercase;
+  letter-spacing:.07em; margin-bottom:12px; display:flex; align-items:center; gap:8px }
+.result-block-title::after { content:''; flex:1; height:1px; background:var(--border) }
+
+/* Video player wrapper — key change for browser support */
+.video-container { border-radius:var(--r2); overflow:hidden; background:#000;
+  position:relative; border:1px solid var(--border) }
+.video-container video { width:100%; max-height:500px; display:block; outline:none }
+.video-overlay-msg { position:absolute; inset:0; display:flex; align-items:center;
+  justify-content:center; flex-direction:column; gap:10px; background:rgba(0,0,0,.7);
+  color:var(--text2); font-size:13px; pointer-events:none }
+.video-download-bar { display:flex; align-items:center; justify-content:space-between;
+  padding:8px 12px; background:var(--bg3); border-top:1px solid var(--border); gap:8px }
+.video-filename { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text2);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1 }
+
+/* Person clip grid */
+.clips-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:16px }
+.clip-card { background:var(--bg2); border:1px solid var(--border); border-radius:var(--r2); overflow:hidden; transition:var(--transition) }
+.clip-card:hover { border-color:var(--border2) }
+.clip-card-head { padding:12px 14px; border-bottom:1px solid var(--border);
+  display:flex; align-items:center; justify-content:space-between }
+.clip-person-name { font-size:13px; font-weight:600; display:flex; align-items:center; gap:8px }
+.found-chip  { font-size:10px; padding:2px 8px; border-radius:8px; font-weight:600 }
+.chip-found  { background:rgba(63,185,80,.12); color:var(--green); border:1px solid rgba(63,185,80,.2) }
+.chip-nope   { background:rgba(248,81,73,.12); color:var(--red);   border:1px solid rgba(248,81,73,.2) }
+.clip-match-ct { font-size:11px; color:var(--text3); font-family:'JetBrains Mono',monospace }
+.clip-video-wrap { background:#000; position:relative }
+.clip-video-wrap video { width:100%; max-height:200px; display:block; outline:none }
+.no-clip-placeholder { height:130px; display:flex; align-items:center; justify-content:center;
+  flex-direction:column; gap:7px; color:var(--text3); font-size:12px }
+.ts-chips { padding:10px 14px; display:flex; flex-wrap:wrap; gap:4px; max-height:70px; overflow-y:auto }
+.ts-chip { font-size:10px; font-family:'JetBrains Mono',monospace; padding:2px 7px;
+  background:var(--bg3); border:1px solid var(--border); border-radius:4px; color:var(--text2) }
+
+/* ══════════════════════ DASHBOARD ══════════════════════ */
+.dash-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px }
+@media(max-width:900px) { .dash-grid { grid-template-columns:1fr } }
+.activity-row { display:flex; align-items:center; gap:10px; padding:8px 0;
+  border-bottom:1px solid var(--border); font-size:13px }
+.activity-row:last-child { border-bottom:none }
+
+/* Toast */
+.toast-wrap { position:fixed; bottom:20px; right:20px; display:flex; flex-direction:column; gap:8px; z-index:9999 }
+.toast { padding:12px 16px; background:var(--bg2); border:1px solid var(--border2);
+  border-radius:var(--r); font-size:13px; box-shadow:var(--shadow2);
+  transform:translateX(120%); opacity:0; transition:all .25s cubic-bezier(.4,0,.2,1); max-width:300px }
+.toast.show { transform:translateX(0); opacity:1 }
+.toast.ok  { border-left:3px solid var(--green) }
+.toast.err { border-left:3px solid var(--red); color:var(--red) }
+.toast.info{ border-left:3px solid var(--cyan) }
+
+/* Empty state */
+.empty-state { text-align:center; padding:48px 20px; color:var(--text3) }
+.empty-icon  { font-size:36px; margin-bottom:12px; opacity:.5 }
+.empty-text  { font-size:14px }
+
+/* Video error overlay */
+.video-error-overlay { position:absolute; inset:0; background:rgba(13,17,23,.92);
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:12px; padding:20px; text-align:center }
+.video-error-icon { font-size:36px }
+.video-error-title { font-size:14px; font-weight:600; color:var(--text) }
+.video-error-sub   { font-size:12px; color:var(--text2); max-width:320px; line-height:1.5 }
+.video-error-btns  { display:flex; gap:8px; margin-top:4px; flex-wrap:wrap; justify-content:center }
+.re-encoding-bar   { display:flex; align-items:center; gap:10px; padding:10px 14px;
+  background:rgba(88,166,255,.08); border-top:1px solid rgba(88,166,255,.2); font-size:12px; color:var(--cyan) }
+
+/* ══════════════════════ ANALYTICS / CHARTS ══════════════════════ */
+.chart-grid   { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px }
+@media(max-width:900px){ .chart-grid{ grid-template-columns:1fr } }
+.chart-card   { background:var(--bg2); border:1px solid var(--border); border-radius:var(--r2); padding:18px }
+.chart-title  { font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.08em;
+                color:var(--text2); margin-bottom:4px; display:flex; align-items:center; gap:8px }
+.chart-title::before { content:''; width:3px; height:12px; background:var(--cyan); border-radius:2px }
+.chart-sub    { font-size:11px; color:var(--text3); margin-bottom:14px }
+.chart-wrap   { position:relative; height:220px }
+.chart-legend { display:flex; flex-wrap:wrap; gap:10px; margin-top:10px }
+.legend-item  { display:flex; align-items:center; gap:5px; font-size:11px; color:var(--text2) }
+.legend-dot   { width:10px; height:10px; border-radius:50%; flex-shrink:0 }
+.chart-stats  { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:12px }
+.c-stat       { background:var(--bg3); border-radius:var(--r); padding:8px 10px; text-align:center }
+.c-stat-val   { font-size:16px; font-weight:700; font-family:'JetBrains Mono',monospace }
+.c-stat-lbl   { font-size:10px; color:var(--text3); text-transform:uppercase; letter-spacing:.06em; margin-top:2px }
+.refresh-badge{ font-size:10px; color:var(--text3); margin-left:auto; font-weight:400 }
+
+/* Scrollbar */
+::-webkit-scrollbar { width:6px }
+::-webkit-scrollbar-track { background:transparent }
+::-webkit-scrollbar-thumb { background:var(--bg4); border-radius:3px }
+::-webkit-scrollbar-thumb:hover { background:var(--border2) }
+
+/* Divider */
+.divider { height:1px; background:var(--border); margin:16px 0 }
+.two-col { display:grid; grid-template-columns:1fr 1fr; gap:14px }
+@media(max-width:640px) { .two-col { grid-template-columns:1fr } }
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+<!-- ═══════════ TOPBAR ═══════════ -->
+<header class="topbar">
+  <div style="display:flex;align-items:center;gap:10px">
+    <div class="logo-mark">👁</div>
+    <div>
+      <div class="logo-text">CrowdLens</div>
+      <div class="logo-sub">Distributed Video Analysis</div>
+    </div>
+  </div>
+
+  <div class="topbar-center">
+    <button class="tab-btn active" onclick="navTab('upload',this)">📤 Analyse</button>
+    <button class="tab-btn" onclick="navTab('jobs',this)">📋 Jobs</button>
+    <button class="tab-btn" onclick="navTab('dash',this)">📊 Dashboard</button>
+    <button class="tab-btn" onclick="navTab('workers',this)">🖥 Workers</button>
+    <button class="tab-btn" onclick="navTab('analytics',this)">📈 Analytics</button>
+  </div>
+
+  <div class="topbar-right">
+    <div class="sys-pill">
+      <div class="sys-dot" id="kafka-dot"></div>
+      <span id="kafka-lbl">Connecting…</span>
+    </div>
+    <div class="sys-pill">
+      <div class="sys-dot" id="slave-dot"></div>
+      <span id="slave-lbl">0 workers</span>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════ SIDEBAR ═══════════ -->
+<nav class="sidebar">
+  <div class="nav-section">Analysis</div>
+  <div class="nav-item active" id="nav-upload" onclick="navFull('upload',this)">
+    <span class="nav-icon">📤</span> New Analysis
+  </div>
+  <div class="nav-item" id="nav-jobs" onclick="navFull('jobs',this)">
+    <span class="nav-icon">📋</span> All Jobs
+    <span class="nav-badge" id="jobs-badge" style="display:none">0</span>
+  </div>
+  <div class="nav-section">System</div>
+  <div class="nav-item" id="nav-dash" onclick="navFull('dash',this)">
+    <span class="nav-icon">📊</span> Dashboard
+  </div>
+  <div class="nav-item" id="nav-workers" onclick="navFull('workers',this)">
+    <span class="nav-icon">🖥</span> Workers
+  </div>
+  <div class="nav-section">Analytics</div>
+  <div class="nav-item" id="nav-analytics" onclick="navFull('analytics',this)">
+    <span class="nav-icon">📈</span> Performance Graphs
+  </div>
+  <div class="nav-section">Results</div>
+  <div class="nav-item" id="nav-results" style="display:none" onclick="navFull('results',this)">
+    <span class="nav-icon">🎬</span> Latest Results
+  </div>
+  <div class="nav-section" style="margin-top:auto"></div>
+</nav>
+
+<!-- ═══════════ CONTENT ═══════════ -->
+<main class="content">
+
+<!-- ── UPLOAD ── -->
+<div class="page active" id="page-upload">
+  <div class="page-header">
+    <div class="page-title">New Analysis</div>
+    <div class="page-sub">Upload video files and target person photos to begin crowd counting and person detection</div>
+  </div>
+
+  <div class="upload-grid">
+    <!-- Videos -->
+    <div class="card">
+      <div class="card-hd">🎬 Input Videos</div>
+      <div class="drop-zone" id="vdrop">
+        <input type="file" accept="video/*" multiple id="vinput">
+        <div class="dz-icon">🎞</div>
+        <div class="dz-label">Drop videos here or click to browse</div>
+        <div class="dz-sub">MP4, AVI, MKV, MOV — multiple files supported — max 4 GB each</div>
+      </div>
+      <div class="file-list" id="vlist"></div>
+    </div>
+
+    <!-- Persons -->
+    <div class="card">
+      <div class="card-hd">🎯 Target Persons</div>
+      <div class="person-list" id="person-list"></div>
+      <button class="add-person-btn" onclick="addPerson()">＋ Add Target Person</button>
+    </div>
+  </div>
+
+  <!-- Settings -->
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-hd">⚙️ Detection Settings</div>
+    <div class="settings-grid">
+      <div>
+        <label class="inp-label">YOLO Model</label>
+        <select class="inp" id="s-yolo">
+          <option value="yolov8n.pt">YOLOv8 Nano — fastest</option>
+          <option value="yolov8s.pt" selected>YOLOv8 Small — balanced</option>
+          <option value="yolov8m.pt">YOLOv8 Medium — accurate</option>
+        </select>
+      </div>
+      <div>
+        <label class="inp-label">YOLO Confidence <span style="color:var(--text3)">(lower = more detections)</span></label>
+        <div class="range-row">
+          <input type="range" min=".2" max=".8" step=".05" value=".40" id="s-yconf"
+            oninput="q('s-yconf-v').textContent=parseFloat(this.value).toFixed(2)">
+          <span class="range-val" id="s-yconf-v">0.40</span>
+        </div>
+      </div>
+      <div>
+        <label class="inp-label">Face Threshold <span style="color:var(--text3)">(lower = stricter match)</span></label>
+        <div class="range-row">
+          <input type="range" min=".3" max=".7" step=".05" value=".45" id="s-fthr"
+            oninput="q('s-fthr-v').textContent=parseFloat(this.value).toFixed(2)">
+          <span class="range-val" id="s-fthr-v">0.45</span>
+        </div>
+      </div>
+      <div>
+        <label class="inp-label">Frame Skip <span style="color:var(--text3)">(higher = faster)</span></label>
+        <select class="inp" id="s-fskip">
+          <option value="1">Every frame — maximum accuracy</option>
+          <option value="2">Every 2nd frame — 2× faster</option>
+          <option value="3">Every 3rd frame — 3× faster</option>
+          <option value="5">Every 5th frame — 5× faster</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tips -->
+  <div class="card" style="margin-bottom:16px;background:rgba(88,166,255,.04);border-color:rgba(88,166,255,.15)">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
+      <div style="display:flex;gap:10px;align-items:flex-start">
+        <span style="font-size:18px">💡</span>
+        <div><div style="font-size:12px;font-weight:600;margin-bottom:2px">Better target accuracy</div>
+        <div style="font-size:11px;color:var(--text2)">Upload 3–5 photos per person from different angles and lighting</div></div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:flex-start">
+        <span style="font-size:18px">⚡</span>
+        <div><div style="font-size:12px;font-weight:600;margin-bottom:2px">Faster processing</div>
+        <div style="font-size:11px;color:var(--text2)">Use Frame Skip 2 for long videos — only 4% accuracy loss</div></div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:flex-start">
+        <span style="font-size:18px">🖥</span>
+        <div><div style="font-size:12px;font-weight:600;margin-bottom:2px">More workers = faster</div>
+        <div style="font-size:11px;color:var(--text2)">Start slave.py on additional machines for parallel processing</div></div>
+      </div>
+    </div>
+  </div>
+
+  <button class="btn btn-primary btn-lg" id="submit-btn" onclick="submit()" disabled>
+    🚀 Start Analysis
+  </button>
+</div>
+
+<!-- ── PROGRESS ── -->
+<div class="page" id="page-progress">
+  <div class="progress-wrap">
+    <div class="progress-header">
+      <div class="spinner" id="prog-spinner"></div>
+      <div>
+        <div class="progress-title" id="prog-title">Analysing videos…</div>
+        <div class="progress-sub" id="prog-sub">Initialising pipeline</div>
+      </div>
+    </div>
+
+    <div class="pct-display" id="prog-pct">0%</div>
+    <div class="pbar thick" style="margin-bottom:8px">
+      <div class="pbar-fill" id="prog-bar" style="width:0%"></div>
+    </div>
+    <div class="progress-msg" id="prog-msg"></div>
+
+    <div class="video-prog-list" id="vid-prog-list"></div>
+
+    <div style="margin-top:24px;display:flex;gap:10px">
+      <button class="btn btn-outline" onclick="pollStatus()">⟳ Refresh</button>
+      <button class="btn btn-danger" id="cancel-btn" onclick="cancelJob()">✕ Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── JOBS ── -->
+<div class="page" id="page-jobs">
+  <div class="page-header">
+    <div class="page-title">All Jobs</div>
+    <div class="page-sub">Click View to load results for a completed job</div>
+  </div>
+  <div class="card">
+    <div id="jobs-content">
+      <div class="empty-state"><div class="empty-icon">📋</div><div class="empty-text">No jobs yet. Submit a video to get started.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── DASHBOARD ── -->
+<div class="page" id="page-dash">
+  <div class="page-header">
+    <div class="page-title">System Dashboard</div>
+    <div class="page-sub">Live metrics — auto-refreshes every 4 seconds</div>
+  </div>
+  <div class="stats-grid" id="dash-stats"></div>
+  <div class="dash-grid">
+    <div class="card">
+      <div class="card-hd">Active Jobs</div>
+      <div id="dash-active-jobs"><div class="empty-state" style="padding:20px"><div class="empty-icon" style="font-size:24px">✅</div><div class="empty-text">No active jobs</div></div></div>
+    </div>
+    <div class="card">
+      <div class="card-hd">Recent Activity</div>
+      <div id="dash-activity"><div class="empty-state" style="padding:20px"><div class="empty-text">No recent activity</div></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── WORKERS ── -->
+<div class="page" id="page-workers">
+  <div class="page-header">
+    <div class="page-title">Worker Nodes</div>
+    <div class="page-sub">Slave machine health and load balancer status — auto-refreshes every 4 seconds</div>
+  </div>
+  <div class="workers-grid" id="workers-grid">
+    <div class="empty-state"><div class="empty-icon">🖥</div><div class="empty-text">No workers connected.<br>Run <code style="background:var(--bg3);padding:2px 6px;border-radius:4px">python slave.py</code> on a worker machine.</div></div>
+  </div>
+</div>
+
+<!-- ── RESULTS ── -->
+<div class="page" id="page-results">
+  <div class="results-top">
+    <div>
+      <div class="page-title" id="r-title">Results</div>
+      <div style="font-size:13px;color:var(--text2);margin-top:4px" id="r-meta"></div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-outline" id="r-download-btn" style="display:none" onclick="downloadResult()">⬇ Download result.json</button>
+      <button class="btn btn-ghost" onclick="navFull('jobs',q('nav-jobs'))">← All Jobs</button>
+    </div>
+  </div>
+  <div class="stats-grid" id="r-stats"></div>
+  <div id="r-body"></div>
+</div>
+
+<!-- ── ANALYTICS ── -->
+<div class="page" id="page-analytics">
+  <div class="page-header">
+    <div class="page-title">Performance Analytics</div>
+    <div class="page-sub">Real-time frame processing metrics per slave worker — auto-refreshes every 3 seconds</div>
+  </div>
+
+  <!-- Summary stat cards -->
+  <div class="stats-grid" id="analytics-stats">
+    <div class="stat-card" style="--accent:var(--cyan)"><div class="stat-val" id="as-total-frames">0</div><div class="stat-lbl">Total Frames Processed</div></div>
+    <div class="stat-card" style="--accent:var(--green)"><div class="stat-val" id="as-avg-ms">—</div><div class="stat-lbl">Avg Frame Time (ms)</div></div>
+    <div class="stat-card" style="--accent:var(--purple)"><div class="stat-val" id="as-active-slaves">0</div><div class="stat-lbl">Active Slaves</div></div>
+    <div class="stat-card" style="--accent:var(--orange)"><div class="stat-val" id="as-total-fps">0</div><div class="stat-lbl">Cluster FPS</div></div>
+  </div>
+
+  <!-- Chart row 1 -->
+  <div class="chart-grid">
+
+    <!-- CHART 1: Frame processing time per slave (line chart) -->
+    <div class="chart-card">
+      <div class="chart-title">⏱ Frame Processing Time per Slave
+        <span class="refresh-badge" id="ft-refresh-time">—</span>
+      </div>
+      <div class="chart-sub">Time taken (ms) to process each frame — last 50 samples per slave</div>
+      <div class="chart-wrap">
+        <canvas id="chart-frame-time"></canvas>
+      </div>
+      <div class="chart-legend" id="ft-legend"></div>
+      <div class="chart-stats" id="ft-stats"></div>
+    </div>
+
+    <!-- CHART 2: Frames processed by each slave (bar chart) -->
+    <div class="chart-card">
+      <div class="chart-title">🖥 Frames Processed per Slave
+        <span class="refresh-badge" id="fc-refresh-time">—</span>
+      </div>
+      <div class="chart-sub">Cumulative frame count showing workload distribution across workers</div>
+      <div class="chart-wrap">
+        <canvas id="chart-frame-count"></canvas>
+      </div>
+      <div class="chart-legend" id="fc-legend"></div>
+      <div class="chart-stats" id="fc-stats"></div>
+    </div>
+  </div>
+
+  <!-- Chart row 2 -->
+  <div class="chart-grid">
+
+    <!-- CHART 3: Average frame time comparison (horizontal bar) -->
+    <div class="chart-card">
+      <div class="chart-title">📊 Average Processing Time Comparison</div>
+      <div class="chart-sub">Mean ms per frame per slave — lower is better</div>
+      <div class="chart-wrap" style="height:180px">
+        <canvas id="chart-avg-time"></canvas>
+      </div>
+    </div>
+
+    <!-- CHART 4: FPS per slave over time (area chart) -->
+    <div class="chart-card">
+      <div class="chart-title">⚡ FPS History per Slave</div>
+      <div class="chart-sub">Frames per second reported in last 20 heartbeats per worker</div>
+      <div class="chart-wrap" style="height:180px">
+        <canvas id="chart-fps-history"></canvas>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</main>
+</div>
+
+<!-- Toast container -->
+<div class="toast-wrap" id="toasts"></div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+//  UTILITIES
+// ══════════════════════════════════════════════════════════════
+const q  = id => document.getElementById(id);
+const qs = sel => document.querySelector(sel);
+
+function toast(msg, type='info', dur=3500) {
+  const wrap = q('toasts');
+  const el   = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  wrap.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 300) }, dur);
+}
+
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+function fmtBytes(b){ return b<1048576?(b/1024).toFixed(1)+' KB':(b/1048576).toFixed(1)+' MB' }
+function fmtDur(s){ const m=Math.floor(s/60),sec=Math.floor(s%60); return m>0?`${m}:${String(sec).padStart(2,'0')}`:`${sec}s` }
+function timeAgo(ts){ const s=Date.now()/1000-ts; if(s<60)return Math.floor(s)+'s ago'; if(s<3600)return Math.floor(s/60)+'m ago'; return Math.floor(s/3600)+'h ago' }
+function statusLabel(s){ return {queued:'Queued',enrolling:'Enrolling faces',processing:'Processing',extracting:'Building clips',done:'Complete',error:'Error',cancelled:'Cancelled'}[s]||s }
+function statusClass(s){ return {queued:'s-queued',enrolling:'s-enrolling',processing:'s-processing',extracting:'s-extracting',done:'s-done',error:'s-error',cancelled:'s-cancelled'}[s]||'s-queued' }
+
+// ══════════════════════════════════════════════════════════════
+//  NAVIGATION
+// ══════════════════════════════════════════════════════════════
+let currentPage = 'upload';
+
+function navFull(page, el) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+
+  q('page-'+page).classList.add('active');
+  if (el) el.classList.add('active');
+
+  currentPage = page;
+  if (page==='jobs')    refreshJobs();
+  if (page==='dash')    refreshDash();
+  if (page==='workers') refreshWorkers();
+}
+
+function navTab(page, btn) {
+  navFull(page, q('nav-'+page));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════════════════════
+let videos   = [];
+let persons  = [];
+let activeJobId = null;
+let sse = null;
+
+// ══════════════════════════════════════════════════════════════
+//  VIDEO DROP ZONE
+// ══════════════════════════════════════════════════════════════
+const vdrop = q('vdrop');
+q('vinput').addEventListener('change', e => addVideos(e.target.files));
+vdrop.addEventListener('dragover', e => { e.preventDefault(); vdrop.classList.add('over') });
+vdrop.addEventListener('dragleave', () => vdrop.classList.remove('over'));
+vdrop.addEventListener('drop', e => { e.preventDefault(); vdrop.classList.remove('over'); addVideos(e.dataTransfer.files) });
+
+function addVideos(files) {
+  for (const f of files) {
+    if (!videos.find(v => v.name === f.name)) videos.push(f);
+  }
+  renderVideoList();
+  checkReady();
+}
+
+function renderVideoList() {
+  const list = q('vlist');
+  if (!videos.length) { list.innerHTML=''; vdrop.classList.remove('has-files'); return }
+  vdrop.classList.add('has-files');
+  list.innerHTML = videos.map((f,i) => `
+    <div class="file-chip">
+      <span class="file-chip-icon">🎬</span>
+      <span class="file-chip-name">${esc(f.name)}</span>
+      <span class="file-chip-size">${fmtBytes(f.size)}</span>
+      <button class="file-chip-rm" onclick="rmVideo(${i})" title="Remove">×</button>
+    </div>`).join('');
+}
+
+function rmVideo(i) { videos.splice(i,1); renderVideoList(); checkReady() }
+
+// ══════════════════════════════════════════════════════════════
+//  PERSON MANAGEMENT
+// ══════════════════════════════════════════════════════════════
+function addPerson() {
+  persons.push({ name: `Person ${persons.length+1}`, files:[] });
+  renderPersons();
+}
+
+function renderPersons() {
+  const list = q('person-list');
+  list.innerHTML = persons.map((p,idx) => `
+    <div class="person-card" id="pc-${idx}">
+      <div class="person-card-head">
+        <div class="person-avatar">${idx+1}</div>
+        <input class="person-inp" value="${esc(p.name)}" placeholder="Enter person name"
+          oninput="persons[${idx}].name=this.value">
+        <button class="person-rm" onclick="rmPerson(${idx})" title="Remove person">×</button>
+      </div>
+      <div class="photo-row" id="pr-${idx}">
+        ${p.files.map((f,m) => `
+          <div class="photo-thumb">
+            <img src="${URL.createObjectURL(f)}" alt="">
+            <button class="photo-del" onclick="rmPhoto(${idx},${m})" title="Remove photo">✕</button>
+          </div>`).join('')}
+        <button class="photo-add" title="Add photo">
+          +
+          <input type="file" accept="image/*" multiple onchange="addPhotos(${idx},this.files)">
+        </button>
+      </div>
+      ${p.files.length===0 ? `<div style="font-size:11px;color:var(--orange);margin-top:6px">⚠ Add at least one photo</div>` : `<div style="font-size:11px;color:var(--text3);margin-top:6px">${p.files.length} photo${p.files.length>1?'s':''} enrolled</div>`}
+    </div>`).join('');
+  checkReady();
+}
+
+function rmPerson(i)        { persons.splice(i,1); renderPersons() }
+function addPhotos(idx, fl) { for(const f of fl) persons[idx].files.push(f); renderPersons(); checkReady() }
+function rmPhoto(pi, mi)    { persons[pi].files.splice(mi,1); renderPersons(); checkReady() }
+
+// ══════════════════════════════════════════════════════════════
+//  VALIDATION
+// ══════════════════════════════════════════════════════════════
+function checkReady() {
+  const ok = videos.length>0 && persons.length>0 && persons.every(p=>p.files.length>0);
+  q('submit-btn').disabled = !ok;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  SUBMIT
+// ══════════════════════════════════════════════════════════════
+async function submit() {
+  if (!videos.length)               return toast('Add at least one video file.','err');
+  if (!persons.length)              return toast('Add at least one target person.','err');
+  if (persons.some(p=>!p.files.length)) return toast('Each person needs at least one photo.','err');
+
+  const fd = new FormData();
+  videos.forEach((f,i)  => fd.append(`video_${i}`, f));
+  persons.forEach((p,n) => {
+    fd.append(`target_${n}_name`, p.name);
+    p.files.forEach((f,m) => fd.append(`target_${n}_img${m}`, f));
+  });
+  fd.append('yolo_model',     q('s-yolo').value);
+  fd.append('yolo_conf',      q('s-yconf').value);
+  fd.append('face_threshold', q('s-fthr').value);
+  fd.append('frame_skip',     q('s-fskip').value);
+
+  q('submit-btn').disabled = true;
+  showProgressPage(videos.map(f=>f.name));
+
+  try {
+    const res  = await fetch('/api/analyze', { method:'POST', body:fd });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error||'Upload failed');
+    activeJobId = data.job_id;
+    q('cancel-btn').disabled = false;
+    startSSE(data.job_id);
+    toast(`Job ${data.job_id} started — ${data.video_count} video(s)`, 'ok');
+  } catch(e) {
+    toast(e.message, 'err', 5000);
+    q('submit-btn').disabled = false;
+    navFull('upload', q('nav-upload'));
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  PROGRESS PAGE
+// ══════════════════════════════════════════════════════════════
+function showProgressPage(videoNames) {
+  navFull('progress', null);
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  q('prog-pct').textContent = '0%';
+  q('prog-bar').style.width = '0%';
+  q('prog-msg').textContent = '';
+  q('prog-title').textContent = 'Analysing videos…';
+  q('prog-sub').textContent = 'Uploading and initialising';
+  q('vid-prog-list').innerHTML = videoNames.map((name,i) => `
+    <div class="vid-prog-item" id="vprog-${i}">
+      <div class="vid-prog-row">
+        <span class="vid-prog-name">🎬 ${esc(name)}</span>
+        <span class="vid-prog-pct" id="vpct-${i}">0%</span>
+      </div>
+      <div class="pbar"><div class="pbar-fill" id="vbar-${i}" style="width:0%"></div></div>
+      <div class="vid-prog-msg" id="vmsg-${i}">Queued</div>
+    </div>`).join('');
+}
+
+function updateProgress(d) {
+  const pct = d.progress||0;
+  q('prog-pct').textContent  = pct+'%';
+  q('prog-bar').style.width  = pct+'%';
+  q('prog-msg').textContent  = d.message||'';
+  q('prog-sub').textContent  = statusLabel(d.status);
+
+  const icon = {enrolling:'🔐',processing:'⚙️',extracting:'✂️',done:'✅',error:'❌'}[d.status]||'⏳';
+  q('prog-title').textContent = icon+' '+statusLabel(d.status);
+
+  if (d.status==='done') {
+    q('prog-spinner').style.display='none';
+    q('cancel-btn').disabled=true;
+  }
+
+  (d.videos||[]).forEach((v,i) => {
+    const pctEl = q(`vpct-${i}`); const barEl = q(`vbar-${i}`); const msgEl = q(`vmsg-${i}`);
+    if (pctEl) pctEl.textContent = (v.progress||0)+'%';
+    if (barEl) barEl.style.width = (v.progress||0)+'%';
+    if (msgEl) msgEl.textContent = v.message||'';
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+//  SSE
+// ══════════════════════════════════════════════════════════════
+function startSSE(jid) {
+  if (sse) sse.close();
+  sse = new EventSource(`/api/progress/${jid}`);
+  sse.onmessage = e => {
+    const d = JSON.parse(e.data);
+    if (d.error) { toast(d.error,'err'); return }
+    updateProgress(d);
+    if (d.status==='done') {
+      sse.close();
+      setTimeout(() => { loadResults(jid, true); toast('Analysis complete!','ok') }, 600);
+    } else if (d.status==='error') {
+      sse.close();
+      toast(d.error||d.message,'err',6000);
+    }
+  };
+  sse.onerror = () => setTimeout(() => pollStatus(jid), 3000);
+}
+
+async function pollStatus(jid) {
+  try {
+    const d = await (await fetch(`/api/status/${jid}`)).json();
+    updateProgress(d);
+    if (d.status==='done')  { loadResults(jid,true); return }
+    if (d.status==='error') { toast(d.message,'err'); return }
+    setTimeout(()=>pollStatus(jid), 2500);
+  } catch(e) { setTimeout(()=>pollStatus(jid),5000) }
+}
+
+async function cancelJob() {
+  if (!activeJobId) return;
+  if (!confirm('Cancel this job?')) return;
+  await fetch(`/api/cancel/${activeJobId}`,{method:'POST'});
+  toast(`Job ${activeJobId} cancelled.`,'info');
+  navFull('jobs',q('nav-jobs'));
+}
+
+// ══════════════════════════════════════════════════════════════
+//  RESULTS
+// ══════════════════════════════════════════════════════════════
+let lastResultJobId = null;
+
+async function loadResults(jid, autoNav=false) {
+  try {
+    const r = await fetch(`/api/result/${jid}`);
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    if (d.status) { toast('Job not complete yet.','info'); return }
+    renderResults(d, jid);
+    lastResultJobId = jid;
+    q('nav-results').style.display = '';
+    if (autoNav) navFull('results', q('nav-results'));
+  } catch(e) { toast(e.message,'err') }
+}
+
+function renderResults(data, jid) {
+  q('r-title').textContent = `Results — Job ${jid}`;
+  q('r-meta').textContent  = `${data.total_videos} video(s) · ${data.persons?.length||0} person(s) searched`;
+  q('r-download-btn').style.display = '';
+
+  // Stats
+  const allMax  = data.videos ? Math.max(...data.videos.map(v=>v.max_persons||0)) : 0;
+  const allAvg  = data.videos ? (data.videos.reduce((a,v)=>a+(v.avg_persons||0),0)/Math.max(data.videos.length,1)).toFixed(1) : 0;
+  const found   = data.persons?.filter(p=>p.total_matches>0).length||0;
+  const totalMs = data.videos?.reduce((a,v)=>a+(v.match_count||v.persons?.reduce((b,p)=>b+(p.match_count||0),0)||0),0)||0;
+
+  q('r-stats').innerHTML = `
+    <div class="stat-card" style="--accent:var(--cyan)">
+      <div class="stat-val">${data.total_videos}</div><div class="stat-lbl">Videos</div></div>
+    <div class="stat-card" style="--accent:var(--orange)">
+      <div class="stat-val">${allMax}</div><div class="stat-lbl">Peak crowd</div></div>
+    <div class="stat-card" style="--accent:var(--text2)">
+      <div class="stat-val">${allAvg}</div><div class="stat-lbl">Avg persons/frame</div></div>
+    <div class="stat-card" style="--accent:var(--green)">
+      <div class="stat-val">${found}</div><div class="stat-lbl">Persons found</div></div>
+    <div class="stat-card" style="--accent:var(--purple)">
+      <div class="stat-val">${data.persons?.length||0}</div><div class="stat-lbl">Searched</div></div>`;
+
+  const body = q('r-body');
+  body.innerHTML = '';
+
+  (data.videos||[]).forEach((vs, vi) => {
+    // Section header
+    const sec = document.createElement('div');
+    sec.innerHTML = `<div class="result-block-title">📹 ${esc(vs.video_name)} &nbsp;·&nbsp; ${vs.duration_s}s &nbsp;·&nbsp; ${vs.resolution} &nbsp;·&nbsp; avg ${vs.avg_persons} persons</div>`;
+    body.appendChild(sec);
+
+    // Annotated video block
+    const annBlock = document.createElement('div');
+    annBlock.className = 'result-video-block';
+    const annSrc = `/api/video/${jid}/annotated/${vi}`;
+    annBlock.innerHTML = `
+      <div class="result-block-title" style="font-size:12px;margin-bottom:10px">📹 Annotated Video</div>
+      <div class="video-container" id="ann-wrap-${vi}">
+        <div id="ann-loading-${vi}" style="display:flex;align-items:center;justify-content:center;
+          height:120px;color:var(--text2);font-size:13px;gap:10px">
+          <div class="spinner" style="width:22px;height:22px;border-width:2px"></div>
+          Loading video…
+        </div>
+        <video id="ann-video-${vi}" controls preload="auto" playsinline
+          style="width:100%;max-height:500px;display:none;outline:none;background:#000"
+          oncanplay="showVideo('ann',${vi})"
+          onerror="videoError('ann',${vi},'${annSrc}')">
+          <source src="${annSrc}" type="video/mp4; codecs=avc1.42E01E,mp4a.40.2">
+          <source src="${annSrc}" type="video/mp4">
+        </video>
+        <div id="ann-err-${vi}" style="display:none;padding:20px;text-align:center">
+          <div style="font-size:28px;margin-bottom:8px">⚠️</div>
+          <div style="font-size:13px;color:var(--text2);margin-bottom:12px">
+            Browser cannot play this video directly.<br>Download it to watch in VLC or any media player.
+          </div>
+          <a class="btn btn-primary" style="text-decoration:none;display:inline-flex"
+            href="${annSrc}" download>⬇ Download Annotated Video</a>
+        </div>
+        <div class="video-download-bar">
+          <span class="video-filename">${esc(vs.annotated_file||vs.video_name)}</span>
+          <a class="btn btn-outline" style="padding:5px 12px;font-size:11px;text-decoration:none"
+            href="${annSrc}" download>⬇ Download</a>
+        </div>
+      </div>`;
+    body.appendChild(annBlock);
+
+    // Per-person clips
+    if (vs.persons?.length) {
+      const clipsSection = document.createElement('div');
+      clipsSection.className = 'result-video-block';
+      const clipsGrid = document.createElement('div');
+      clipsGrid.className = 'clips-grid';
+      vs.persons.forEach((p,pi) => {
+        const card = document.createElement('div');
+        card.className = 'clip-card';
+        const tsHtml = (p.timestamps||[]).slice(0,24).map(t=>`<span class="ts-chip">${fmtDur(t)}</span>`).join('');
+        const more   = (p.timestamps||[]).length>24 ? `<span class="ts-chip" style="color:var(--text3)">+${p.timestamps.length-24}</span>` : '';
+        card.innerHTML = `
+          <div class="clip-card-head">
+            <div class="clip-person-name">
+              ${p.found?'🎯':'❌'} ${esc(p.name)}
+              <span class="found-chip ${p.found?'chip-found':'chip-nope'}">${p.found?'FOUND':'NOT FOUND'}</span>
+            </div>
+            <span class="clip-match-ct">${p.match_count} frames</span>
+          </div>
+          ${p.found && p.clip_file ? `
+            <div class="clip-video-wrap">
+              <div id="clip-loading-${vi}-${pi}" style="display:flex;align-items:center;justify-content:center;
+                height:80px;color:var(--text2);font-size:12px;gap:8px">
+                <div class="spinner" style="width:18px;height:18px;border-width:2px"></div>Loading…
+              </div>
+              <video controls preload="auto" playsinline
+                style="width:100%;max-height:200px;display:none;outline:none;background:#000"
+                id="clip-video-${vi}-${pi}"
+                oncanplay="showClip(${vi},${pi})"
+                onerror="clipError(${vi},${pi},'/api/video/${jid}/clip/${vi}/${pi}')">
+                <source src="/api/video/${jid}/clip/${vi}/${pi}" type="video/mp4; codecs=avc1.42E01E,mp4a.40.2">
+                <source src="/api/video/${jid}/clip/${vi}/${pi}" type="video/mp4">
+              </video>
+              <div id="clip-err-${vi}-${pi}" style="display:none;padding:12px;text-align:center">
+                <a class="btn btn-primary" style="font-size:11px;text-decoration:none;display:inline-flex"
+                  href="/api/video/${jid}/clip/${vi}/${pi}" download>⬇ Download Clip</a>
+              </div>
+            </div>
+            <div class="video-download-bar">
+              <span class="video-filename">${esc(p.clip_file)}</span>
+              <a class="btn btn-outline" style="padding:4px 10px;font-size:11px;text-decoration:none"
+                href="/api/video/${jid}/clip/${vi}/${pi}" download>⬇</a>
+            </div>` : `
+            <div class="no-clip-placeholder">
+              <span style="font-size:28px">🔍</span>
+              <span>Not detected in this video</span>
+            </div>`}
+          <div class="ts-chips">${tsHtml||'<span style="font-size:11px;color:var(--text3)">No detections</span>'}${more}</div>`;
+        clipsGrid.appendChild(card);
+      });
+      clipsSection.innerHTML = '<div class="result-block-title" style="font-size:12px;margin-bottom:10px">Target Person Clips</div>';
+      clipsSection.appendChild(clipsGrid);
+      body.appendChild(clipsSection);
+    }
+
+    body.appendChild(Object.assign(document.createElement('div'),{className:'divider'}));
+  });
+}
+
+function downloadResult() {
+  if (lastResultJobId) window.open(`/api/download/${lastResultJobId}/result`,'_blank');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  JOBS LIST
+// ══════════════════════════════════════════════════════════════
+async function refreshJobs() {
+  try {
+    const jobs = await (await fetch('/api/jobs')).json();
+    const badge = q('jobs-badge');
+    badge.textContent = jobs.length;
+    badge.style.display = jobs.length ? '' : 'none';
+
+    const el = q('jobs-content');
+    if (!jobs.length) {
+      el.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-text">No jobs yet.</div></div>';
+      return;
+    }
+    el.innerHTML = `
+      <div class="job-table">
+        <div class="job-row" style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.06em;padding-bottom:8px">
+          <span>Job ID</span><span>Progress</span><span>Status</span><span>Videos</span><span>Actions</span>
+        </div>
+        ${jobs.map(j=>`
+        <div class="job-row">
+          <div>
+            <div class="job-id-badge">${esc(j.id)}</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:4px">${timeAgo(j.created)}</div>
+          </div>
+          <div>
+            <div class="pbar" style="margin-bottom:5px"><div class="pbar-fill" style="width:${j.progress||0}%"></div></div>
+            <div style="font-size:11px;color:var(--text3)">${j.progress||0}%</div>
+          </div>
+          <div><span class="status-pill ${statusClass(j.status)}">${statusLabel(j.status)}</span></div>
+          <div style="font-size:12px;color:var(--text2)">${j.videos} video${j.videos!==1?'s':''}</div>
+          <div style="display:flex;gap:6px">
+            ${j.status==='done'
+              ? `<button class="btn btn-success" style="padding:5px 12px;font-size:11px" onclick="loadResults('${j.id}',true)">📊 View</button>`
+              : j.status!=='cancelled' && j.status!=='error'
+                ? `<button class="btn btn-danger" style="padding:5px 10px;font-size:11px" onclick="cancelJobById('${j.id}')">✕</button>`
+                : `<span style="font-size:11px;color:var(--text3)">—</span>`}
+          </div>
+        </div>`).join('')}
+      </div>`;
+  } catch(e) { console.error(e) }
+}
+
+async function cancelJobById(jid) {
+  if (!confirm(`Cancel job ${jid}?`)) return;
+  await fetch(`/api/cancel/${jid}`,{method:'POST'});
+  toast(`Job ${jid} cancelled.`);
+  refreshJobs();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  DASHBOARD
+// ══════════════════════════════════════════════════════════════
+async function refreshDash() {
+  try {
+    const d = await (await fetch('/api/dashboard')).json();
+    const jobs   = d.jobs||[];
+    const slaves = d.slaves||{};
+    const live   = slaves.live_count||0;
+
+    updateSystemStatus(live, slaves.total_fps||0);
+
+    q('dash-stats').innerHTML = `
+      <div class="stat-card" style="--accent:var(--cyan)">
+        <div class="stat-val">${jobs.length}</div><div class="stat-lbl">Total Jobs</div></div>
+      <div class="stat-card" style="--accent:var(--orange)">
+        <div class="stat-val">${jobs.filter(j=>['processing','enrolling','extracting'].includes(j.status)).length}</div>
+        <div class="stat-lbl">Active</div></div>
+      <div class="stat-card" style="--accent:var(--green)">
+        <div class="stat-val">${live}</div><div class="stat-lbl">Live Workers</div></div>
+      <div class="stat-card" style="--accent:var(--purple)">
+        <div class="stat-val">${(slaves.total_fps||0).toFixed(1)}</div>
+        <div class="stat-lbl">Total FPS</div></div>`;
+
+    const active = jobs.filter(j=>!['done','error','cancelled'].includes(j.status));
+    q('dash-active-jobs').innerHTML = active.length
+      ? active.map(j=>`
+          <div style="margin-bottom:14px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+              <span class="job-id-badge">${esc(j.id)}</span>
+              <span class="status-pill ${statusClass(j.status)}">${statusLabel(j.status)}</span>
+              <span style="font-size:12px;color:var(--text3);font-family:'JetBrains Mono',monospace">${j.progress}%</span>
+            </div>
+            <div class="pbar thick"><div class="pbar-fill" style="width:${j.progress}%"></div></div>
+            <div style="font-size:11px;color:var(--text3);margin-top:4px">${esc(j.message||'')}</div>
+          </div>`).join('')
+      : '<div class="empty-state" style="padding:16px"><div class="empty-text">No active jobs</div></div>';
+
+    const recent = jobs.slice(0,6);
+    q('dash-activity').innerHTML = recent.length
+      ? recent.map(j=>`
+          <div class="activity-row">
+            <span class="job-id-badge" style="font-size:10px">${esc(j.id)}</span>
+            <span class="status-pill ${statusClass(j.status)}" style="font-size:10px">${statusLabel(j.status)}</span>
+            <span style="font-size:11px;color:var(--text3);margin-left:auto">${timeAgo(j.created_at)}</span>
+          </div>`).join('')
+      : '<div class="empty-state" style="padding:16px"><div class="empty-text">No activity yet</div></div>';
+  } catch(e) { console.error(e) }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  WORKERS
+// ══════════════════════════════════════════════════════════════
+async function refreshWorkers() {
+  try {
+    const d = await (await fetch('/api/slaves')).json();
+    const slaves = d.slaves||[];
+    const grid = q('workers-grid');
+    if (!slaves.length) {
+      grid.innerHTML = '<div class="empty-state"><div class="empty-icon">🖥</div><div class="empty-text">No workers connected.<br>Run <code style="background:var(--bg3);padding:2px 6px;border-radius:4px">python slave.py</code> on a worker machine.</div></div>';
+      return;
+    }
+    grid.innerHTML = slaves.map(s => `
+      <div class="worker-card${s.alive?'':' dead'}">
+        <div class="worker-head">
+          <div class="sys-dot ${s.alive?'live':''}"></div>
+          <div class="worker-id" title="${esc(s.slave_id)}">${esc(s.slave_id)}</div>
+          <div class="status-pill ${s.alive?'s-done':'s-error'}" style="font-size:10px">
+            ${s.alive?'ONLINE':'OFFLINE'}</div>
+        </div>
+        <div class="w-metric">
+          <span class="w-metric-lbl">Partition</span>
+          <span class="w-metric-val">${s.partition}</span></div>
+        <div class="w-metric">
+          <span class="w-metric-lbl">Queue depth</span>
+          <span class="w-metric-val" style="color:${s.queue_depth>20?'var(--orange)':'var(--text)'}">${s.queue_depth}</span></div>
+        <div class="w-metric">
+          <span class="w-metric-lbl">FPS</span>
+          <span class="w-metric-val" style="color:var(--green)">${s.fps}</span></div>
+        <div class="w-metric">
+          <span class="w-metric-lbl">CPU</span>
+          <span class="w-metric-val">${s.cpu_pct}%</span></div>
+        <div class="mini-bar"><div class="mini-bar-fill" style="width:${Math.min(s.cpu_pct,100)}%;background:${s.cpu_pct>80?'var(--red)':s.cpu_pct>60?'var(--orange)':'var(--cyan)'}"></div></div>
+        <div class="w-metric" style="margin-top:6px">
+          <span class="w-metric-lbl">GPU</span>
+          <span class="w-metric-val">${s.gpu_pct}%</span></div>
+        <div class="mini-bar"><div class="mini-bar-fill" style="width:${Math.min(s.gpu_pct,100)}%;background:var(--purple)"></div></div>
+        <div class="w-metric" style="margin-top:6px">
+          <span class="w-metric-lbl">Frames processed</span>
+          <span class="w-metric-val">${s.total_frames.toLocaleString()}</span></div>
+        <div class="w-metric">
+          <span class="w-metric-lbl">Last seen</span>
+          <span class="w-metric-val" style="color:${s.last_seen_s>10?'var(--orange)':'var(--text3)'}">${s.last_seen_s}s ago</span></div>
+      </div>`).join('');
+  } catch(e) { console.error(e) }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  SYSTEM STATUS (topbar)
+// ══════════════════════════════════════════════════════════════
+function updateSystemStatus(liveSlave, fps) {
+  const kd = q('kafka-dot'); const kl = q('kafka-lbl');
+  const sd = q('slave-dot'); const sl = q('slave-lbl');
+  kd.classList.toggle('live', liveSlave>0);
+  kd.style.background = liveSlave>0 ? 'var(--green)' : 'var(--orange)';
+  kl.textContent = liveSlave>0 ? 'Kafka connected' : 'No workers';
+  sd.classList.toggle('live', liveSlave>0);
+  sd.style.background = liveSlave>0 ? 'var(--green)' : 'var(--text3)';
+  sl.textContent = `${liveSlave} worker${liveSlave!==1?'s':''}`;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  AUTO-REFRESH
+// ══════════════════════════════════════════════════════════════
+setInterval(async () => {
+  try {
+    const d = await (await fetch('/api/slaves')).json();
+    updateSystemStatus(d.live_count||0, d.total_fps||0);
+  } catch(e) {}
+}, 5000);
+
+setInterval(() => {
+  if (currentPage==='dash')      refreshDash();
+  if (currentPage==='workers')   refreshWorkers();
+  if (currentPage==='jobs')       refreshJobs();
+  if (currentPage==='analytics')  refreshAnalytics();
+}, 3000);
+
+// ══════════════════════════════════════════════════════════════
+//  VIDEO PLAYER HELPERS
+// ══════════════════════════════════════════════════════════════
+function showVideo(type, vi) {
+  const loading = q(`${type}-loading-${vi}`);
+  const video   = q(`${type}-video-${vi}`);
+  if (loading) loading.style.display = 'none';
+  if (video)   video.style.display   = 'block';
+}
+
+function showClip(vi, pi) {
+  const loading = q(`clip-loading-${vi}-${pi}`);
+  const video   = q(`clip-video-${vi}-${pi}`);
+  if (loading) loading.style.display = 'none';
+  if (video)   video.style.display   = 'block';
+}
+
+function videoError(type, vi, src) {
+  const loading = q(`${type}-loading-${vi}`);
+  const video   = q(`${type}-video-${vi}`);
+  const err     = q(`${type}-err-${vi}`);
+  if (loading) loading.style.display = 'none';
+  if (video)   video.style.display   = 'none';
+  if (err)     err.style.display     = 'block';
+  console.warn(`Video load error for ${src}. File may still be mp4v encoded.`);
+}
+
+function clipError(vi, pi, src) {
+  const loading = q(`clip-loading-${vi}-${pi}`);
+  const video   = q(`clip-video-${vi}-${pi}`);
+  const err     = q(`clip-err-${vi}-${pi}`);
+  if (loading) loading.style.display = 'none';
+  if (video)   video.style.display   = 'none';
+  if (err)     err.style.display     = 'block';
+}
+
+// ══════════════════════════════════════════════════════════════
+//  VIDEO ERROR HANDLING + RE-ENCODE
+// ══════════════════════════════════════════════════════════════
+const _reencoding = new Set();
+
+async function handleVideoError(videoId, containerId, jid, type, vidx, pidx) {
+  // Avoid duplicate re-encode attempts
+  const key = `${jid}-${type}-${vidx}-${pidx}`;
+  if (_reencoding.has(key)) return;
+  _reencoding.add(key);
+
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  // Show re-encoding status inside the container
+  container.style.position = 'relative';
+  const overlay = document.createElement('div');
+  overlay.className = 'video-error-overlay';
+  overlay.id = 'overlay-' + key;
+  overlay.innerHTML = `
+    <div class="video-error-icon">🔄</div>
+    <div class="video-error-title">Converting video for browser playback…</div>
+    <div class="video-error-sub">The video is being re-encoded to H.264 format. This takes 10–60 seconds depending on video length.</div>
+    <div style="width:200px">
+      <div class="pbar thick"><div class="pbar-fill" id="reencode-bar-${key}" style="width:0%"></div></div>
+    </div>`;
+  container.appendChild(overlay);
+
+  // Animate progress bar while waiting
+  let pct = 0;
+  const anim = setInterval(() => {
+    pct = Math.min(pct + Math.random() * 3, 88);
+    const bar = document.getElementById(`reencode-bar-${key}`);
+    if (bar) bar.style.width = pct + '%';
+  }, 800);
+
+  try {
+    // Trigger server-side re-encode for this job
+    const res = await fetch(`/api/reencode/${jid}`, { method: 'POST' });
+    const data = await res.json();
+    clearInterval(anim);
+
+    const bar = document.getElementById(`reencode-bar-${key}`);
+    if (bar) bar.style.width = '100%';
+
+    await new Promise(r => setTimeout(r, 600));
+
+    // Replace overlay with working video player
+    overlay.remove();
+    const videoEl = document.getElementById(videoId);
+    if (videoEl) {
+      const src = type === 'annotated'
+        ? `/api/video/${jid}/annotated/${vidx}?t=${Date.now()}`
+        : `/api/video/${jid}/clip/${vidx}/${pidx}?t=${Date.now()}`;
+
+      // Remove old error handler to avoid loop, reset source
+      videoEl.onerror = null;
+      videoEl.innerHTML = `<source src="${src}" type="video/mp4">`;
+      videoEl.load();
+      videoEl.play().catch(() => {});  // autoplay after re-encode
+      toast('Video re-encoded successfully! ▶', 'ok');
+    }
+  } catch(e) {
+    clearInterval(anim);
+    // Show fallback download UI
+    overlay.innerHTML = `
+      <div class="video-error-icon">⚠️</div>
+      <div class="video-error-title">Video cannot play in browser</div>
+      <div class="video-error-sub">The video codec is not supported by your browser. Download the file to play it locally with VLC or any media player.</div>
+      <div class="video-error-btns">
+        <a class="btn btn-primary" style="text-decoration:none"
+          href="${type==='annotated'?`/api/video/${jid}/annotated/${vidx}`:`/api/video/${jid}/clip/${vidx}/${pidx}`}"
+          download>⬇ Download Video</a>
+        <button class="btn btn-outline" onclick="retryVideo('${videoId}','${containerId}','${jid}','${type}',${vidx},${pidx})">↺ Retry</button>
+      </div>`;
+    toast('Re-encoding failed. Download the video to view it.', 'err', 5000);
+  }
+}
+
+function retryVideo(videoId, containerId, jid, type, vidx, pidx) {
+  const key = `${jid}-${type}-${vidx}-${pidx}`;
+  _reencoding.delete(key);
+  const overlay = document.getElementById('overlay-' + key);
+  if (overlay) overlay.remove();
+  const v = document.getElementById(videoId);
+  if (v) {
+    const src = type === 'annotated'
+      ? `/api/video/${jid}/annotated/${vidx}?t=${Date.now()}`
+      : `/api/video/${jid}/clip/${vidx}/${pidx}?t=${Date.now()}`;
+    v.innerHTML = `<source src="${src}" type="video/mp4">`;
+    v.load();
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  ANALYTICS — CHARTS
+// ══════════════════════════════════════════════════════════════
+
+// Slave colour palette — consistent across all charts
+const SLAVE_COLORS = [
+  { line:'#58a6ff', fill:'rgba(88,166,255,0.15)', bar:'rgba(88,166,255,0.8)'  },
+  { line:'#3fb950', fill:'rgba(63,185,80,0.15)',  bar:'rgba(63,185,80,0.8)'   },
+  { line:'#e3b341', fill:'rgba(227,179,65,0.15)', bar:'rgba(227,179,65,0.8)'  },
+  { line:'#bc8cff', fill:'rgba(188,140,255,0.15)',bar:'rgba(188,140,255,0.8)' },
+  { line:'#ff7b72', fill:'rgba(255,123,114,0.15)',bar:'rgba(255,123,114,0.8)' },
+];
+
+// Chart.js global defaults — dark theme
+Chart.defaults.color          = '#8b949e';
+Chart.defaults.borderColor    = '#30363d';
+Chart.defaults.font.family    = "'Inter', sans-serif";
+Chart.defaults.font.size      = 11;
+
+// ── Chart instances ────────────────────────────────────────────
+let chartFrameTime  = null;   // line: frame time history per slave
+let chartFrameCount = null;   // bar: total frames per slave
+let chartAvgTime    = null;   // horizontal bar: avg ms comparison
+let chartFpsHistory = null;   // area: fps over time per slave
+
+// FPS rolling history per slave (kept in browser, max 20 points)
+const _fpsHistory = {};       // { slave_id: [fps, fps, ...] }
+
+function slaveColor(idx) {
+  return SLAVE_COLORS[idx % SLAVE_COLORS.length];
+}
+
+function shortSlaveId(id) {
+  // "myhostname_12345" → "slave-1" label or last 6 chars
+  return id.split('_').length >= 2
+    ? id.split('_').slice(-1)[0].slice(-5)   // last 5 digits of PID
+    : id.slice(-8);
+}
+
+// ── Chart 1: Frame processing time line chart ──────────────────
+function initChartFrameTime(slaves) {
+  const ctx = document.getElementById('chart-frame-time').getContext('2d');
+  if (chartFrameTime) { chartFrameTime.destroy(); chartFrameTime = null; }
+
+  const datasets = Object.entries(slaves).map(([sid, info], i) => {
+    const c = slaveColor(i);
+    const hist = info.history || [];
+    return {
+      label:            shortSlaveId(sid),
+      data:             hist.slice(-50),
+      borderColor:      c.line,
+      backgroundColor:  c.fill,
+      borderWidth:      2,
+      pointRadius:      hist.length < 20 ? 3 : 0,
+      pointHoverRadius: 5,
+      tension:          0.3,
+      fill:             true,
+    };
+  });
+
+  chartFrameTime = new Chart(ctx, {
+    type: 'line',
+    data: { labels: [], datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 400 },
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: { display: false },
+        y: {
+          title: { display: true, text: 'ms / frame', color:'#8b949e' },
+          beginAtZero: true,
+          grid: { color:'rgba(255,255,255,0.04)' },
+          ticks: { callback: v => v + ' ms' }
+        }
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)} ms`
+          }
+        }
+      }
+    }
+  });
+}
+
+function updateChartFrameTime(slaves) {
+  if (!chartFrameTime) { initChartFrameTime(slaves); return; }
+
+  Object.entries(slaves).forEach(([sid, info], i) => {
+    const hist = (info.history || []).slice(-50);
+    if (i < chartFrameTime.data.datasets.length) {
+      chartFrameTime.data.datasets[i].data = hist;
+    }
+  });
+  // x-labels = sample indices
+  const maxLen = Math.max(...Object.values(slaves).map(s => (s.history||[]).length), 0);
+  chartFrameTime.data.labels = Array.from({length: Math.min(maxLen, 50)}, (_,i) => i+1);
+  chartFrameTime.update('none');
+}
+
+// ── Chart 2: Frame count per slave (bar) ──────────────────────
+function initChartFrameCount(slaves) {
+  const ctx = document.getElementById('chart-frame-count').getContext('2d');
+  if (chartFrameCount) { chartFrameCount.destroy(); chartFrameCount = null; }
+
+  const labels   = Object.keys(slaves).map(shortSlaveId);
+  const data     = Object.values(slaves).map(s => s.total_frames || 0);
+  const bgColors = Object.keys(slaves).map((_,i) => slaveColor(i).bar);
+
+  chartFrameCount = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Frames Processed',
+        data,
+        backgroundColor: bgColors,
+        borderColor:     bgColors.map(c => c.replace('0.8','1')),
+        borderWidth: 1,
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 400 },
+      scales: {
+        x: { grid: { display: false } },
+        y: {
+          title: { display: true, text: 'Total Frames', color:'#8b949e' },
+          beginAtZero: true,
+          grid: { color:'rgba(255,255,255,0.04)' },
+          ticks: { callback: v => v.toLocaleString() }
+        }
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => `${ctx.parsed.y.toLocaleString()} frames`
+          }
+        }
+      }
+    }
+  });
+}
+
+function updateChartFrameCount(slaves) {
+  if (!chartFrameCount) { initChartFrameCount(slaves); return; }
+  chartFrameCount.data.labels = Object.keys(slaves).map(shortSlaveId);
+  chartFrameCount.data.datasets[0].data = Object.values(slaves).map(s => s.total_frames||0);
+  chartFrameCount.update('none');
+}
+
+// ── Chart 3: Average time comparison (horizontal bar) ─────────
+function initChartAvgTime(slaves) {
+  const ctx = document.getElementById('chart-avg-time').getContext('2d');
+  if (chartAvgTime) { chartAvgTime.destroy(); chartAvgTime = null; }
+
+  const labels   = Object.keys(slaves).map(shortSlaveId);
+  const data     = Object.values(slaves).map(s => s.avg_ms || 0);
+  const bgColors = Object.keys(slaves).map((_,i) => slaveColor(i).bar);
+
+  chartAvgTime = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Avg ms/frame',
+        data, backgroundColor: bgColors, borderRadius: 4, borderWidth: 1,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 400 },
+      scales: {
+        x: {
+          title: { display: true, text: 'Average ms / frame', color:'#8b949e' },
+          beginAtZero: true,
+          grid: { color:'rgba(255,255,255,0.04)' },
+          ticks: { callback: v => v + ' ms' }
+        },
+        y: { grid: { display: false } }
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => `${ctx.parsed.x.toFixed(1)} ms avg` } }
+      }
+    }
+  });
+}
+
+function updateChartAvgTime(slaves) {
+  if (!chartAvgTime) { initChartAvgTime(slaves); return; }
+  chartAvgTime.data.labels = Object.keys(slaves).map(shortSlaveId);
+  chartAvgTime.data.datasets[0].data = Object.values(slaves).map(s => s.avg_ms||0);
+  chartAvgTime.update('none');
+}
+
+// ── Chart 4: FPS history per slave (area line) ────────────────
+function initChartFpsHistory(slaveList) {
+  const ctx = document.getElementById('chart-fps-history').getContext('2d');
+  if (chartFpsHistory) { chartFpsHistory.destroy(); chartFpsHistory = null; }
+
+  const datasets = slaveList.map((s, i) => {
+    const c = slaveColor(i);
+    return {
+      label:           shortSlaveId(s.slave_id),
+      data:            (_fpsHistory[s.slave_id] || []).slice(-20),
+      borderColor:     c.line,
+      backgroundColor: c.fill,
+      borderWidth:     2, tension:0.3, fill:true,
+      pointRadius:     2, pointHoverRadius:5,
+    };
+  });
+
+  chartFpsHistory = new Chart(ctx, {
+    type: 'line',
+    data: { labels: Array.from({length:20},(_,i)=>i+1), datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 400 },
+      interaction: { mode:'index', intersect:false },
+      scales: {
+        x: { display: false },
+        y: {
+          title: { display:true, text:'FPS', color:'#8b949e' },
+          beginAtZero: true,
+          grid: { color:'rgba(255,255,255,0.04)' },
+          ticks: { callback: v => v + ' fps' }
+        }
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)} fps` } }
+      }
+    }
+  });
+}
+
+function updateChartFpsHistory(slaveList) {
+  // Record current fps for each slave
+  slaveList.forEach(s => {
+    if (!_fpsHistory[s.slave_id]) _fpsHistory[s.slave_id] = [];
+    _fpsHistory[s.slave_id].push(parseFloat(s.fps) || 0);
+    if (_fpsHistory[s.slave_id].length > 20) _fpsHistory[s.slave_id].shift();
+  });
+
+  if (!chartFpsHistory) { initChartFpsHistory(slaveList); return; }
+
+  slaveList.forEach((s, i) => {
+    if (i < chartFpsHistory.data.datasets.length) {
+      chartFpsHistory.data.datasets[i].data = (_fpsHistory[s.slave_id]||[]).slice(-20);
+    }
+  });
+  chartFpsHistory.update('none');
+}
+
+// ── Legend + stat helpers ──────────────────────────────────────
+function renderFtLegend(slaves) {
+  const el = q('ft-legend');
+  if (!el) return;
+  el.innerHTML = Object.keys(slaves).map((sid,i) =>
+    `<div class="legend-item">
+       <div class="legend-dot" style="background:${slaveColor(i).line}"></div>
+       <span>${esc(shortSlaveId(sid))}</span>
+     </div>`).join('');
+}
+
+function renderFtStats(slaves) {
+  const el = q('ft-stats');
+  if (!el) return;
+  const allMs = Object.values(slaves).flatMap(s => s.history||[]);
+  const min   = allMs.length ? Math.min(...allMs).toFixed(1) : '—';
+  const max_v = allMs.length ? Math.max(...allMs).toFixed(1) : '—';
+  const avg   = allMs.length ? (allMs.reduce((a,b)=>a+b,0)/allMs.length).toFixed(1) : '—';
+  el.innerHTML = `
+    <div class="c-stat"><div class="c-stat-val" style="color:var(--green)">${min}</div><div class="c-stat-lbl">Min ms</div></div>
+    <div class="c-stat"><div class="c-stat-val" style="color:var(--cyan)">${avg}</div><div class="c-stat-lbl">Avg ms</div></div>
+    <div class="c-stat"><div class="c-stat-val" style="color:var(--red)">${max_v}</div><div class="c-stat-lbl">Max ms</div></div>`;
+}
+
+function renderFcStats(slaves) {
+  const el = q('fc-stats');
+  if (!el) return;
+  const totals = Object.values(slaves).map(s => s.total_frames||0);
+  const total  = totals.reduce((a,b)=>a+b,0);
+  const maxV   = Math.max(...totals, 0);
+  const minV   = Math.min(...totals, 0);
+  el.innerHTML = `
+    <div class="c-stat"><div class="c-stat-val" style="color:var(--cyan)">${total.toLocaleString()}</div><div class="c-stat-lbl">Total Frames</div></div>
+    <div class="c-stat"><div class="c-stat-val" style="color:var(--green)">${maxV.toLocaleString()}</div><div class="c-stat-lbl">Most (1 slave)</div></div>
+    <div class="c-stat"><div class="c-stat-val" style="color:var(--text2)">${minV.toLocaleString()}</div><div class="c-stat-lbl">Least (1 slave)</div></div>`;
+}
+
+// ── Main refresh function ─────────────────────────────────────
+async function refreshAnalytics() {
+  try {
+    const [fsRes, slaveRes] = await Promise.all([
+      fetch('/api/frame_stats'),
+      fetch('/api/slaves'),
+    ]);
+    const fsData    = await fsRes.json();
+    const slaveData = await slaveRes.json();
+
+    const slaves    = fsData.slaves   || {};
+    const slaveList = slaveData.slaves || [];
+
+    const now = new Date().toLocaleTimeString();
+
+    // ── Summary stats ──────────────────────────────────────────
+    const totalFrames  = Object.values(slaves).reduce((a,s)=>a+(s.total_frames||0),0);
+    const allAvgMs     = Object.values(slaves).filter(s=>s.avg_ms>0).map(s=>s.avg_ms);
+    const clusterAvgMs = allAvgMs.length
+      ? (allAvgMs.reduce((a,b)=>a+b,0)/allAvgMs.length).toFixed(1)
+      : '—';
+    const activeSlavesN = slaveList.filter(s=>s.alive).length;
+    const totalFps      = slaveList.reduce((a,s)=>a+(parseFloat(s.fps)||0),0).toFixed(1);
+
+    const as_tf = q('as-total-frames'); if(as_tf) as_tf.textContent = totalFrames.toLocaleString();
+    const as_am = q('as-avg-ms');       if(as_am) as_am.textContent = clusterAvgMs === '—' ? '—' : clusterAvgMs+' ms';
+    const as_as = q('as-active-slaves');if(as_as) as_as.textContent = activeSlavesN;
+    const as_fp = q('as-total-fps');    if(as_fp) as_fp.textContent = totalFps+' fps';
+
+    // ── Chart 1: frame time history ────────────────────────────
+    if (Object.keys(slaves).length) {
+      updateChartFrameTime(slaves);
+      renderFtLegend(slaves);
+      renderFtStats(slaves);
+      const ftR = q('ft-refresh-time'); if(ftR) ftR.textContent = 'Updated ' + now;
+    }
+
+    // ── Chart 2: frame count per slave ─────────────────────────
+    if (Object.keys(slaves).length) {
+      updateChartFrameCount(slaves);
+      renderFcStats(slaves);
+      const fcR = q('fc-refresh-time'); if(fcR) fcR.textContent = 'Updated ' + now;
+    }
+
+    // ── Chart 3: avg time comparison ───────────────────────────
+    if (Object.keys(slaves).length) updateChartAvgTime(slaves);
+
+    // ── Chart 4: fps history ───────────────────────────────────
+    if (slaveList.length) updateChartFpsHistory(slaveList);
+
+  } catch(e) { console.error('Analytics refresh error:', e); }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════════════════
+addPerson();
+</script>
+</body>
+</html>
